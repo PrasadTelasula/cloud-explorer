@@ -4,7 +4,7 @@ Cloud Explorer Backend - Main FastAPI Application
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, status
+from fastapi import FastAPI, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -13,6 +13,14 @@ from fastapi.openapi.utils import get_openapi
 
 from app.core.config import settings
 from app.core.validation import validate_configuration, setup_logging
+from app.core.security import (
+    SecurityHeadersMiddleware, 
+    RequestLoggingMiddleware, 
+    setup_rate_limiting,
+    rate_limit_default,
+    rate_limit_config
+)
+from app.core.ssl_utils import get_ssl_context
 from app.routers import health
 from app.models.responses import RootResponse, ConfigResponse, ErrorResponse
 
@@ -100,14 +108,30 @@ app.add_middleware(
     allowed_hosts=settings.allowed_hosts_list,
 )
 
-# CORS middleware
+# Security headers middleware
+app.add_middleware(
+    SecurityHeadersMiddleware,
+    enabled=settings.SECURITY_HEADERS_ENABLED,
+)
+
+# Request logging middleware (for security monitoring)
+app.add_middleware(
+    RequestLoggingMiddleware,
+)
+
+# CORS middleware (configured for security)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["X-Process-Time"],
+    max_age=600,  # Cache preflight requests for 10 minutes
 )
+
+# Setup rate limiting
+rate_limiter = setup_rate_limiting(app)
 
 # Include routers
 app.include_router(health.router, prefix="/api", tags=["health"])
@@ -219,9 +243,14 @@ app.openapi = custom_openapi
             "description": "API information retrieved successfully",
             "model": RootResponse,
         },
+        429: {
+            "description": "Rate limit exceeded",
+            "model": ErrorResponse,
+        },
     },
 )
-async def root() -> RootResponse:
+@rate_limit_default()
+async def root(request: Request) -> RootResponse:
     """
     Root endpoint providing API information and navigation links.
     
@@ -258,9 +287,14 @@ async def root() -> RootResponse:
             "description": "Configuration endpoint not available in production",
             "model": ErrorResponse,
         },
+        429: {
+            "description": "Rate limit exceeded",
+            "model": ErrorResponse,
+        },
     },
 )
-async def get_config() -> ConfigResponse:
+@rate_limit_config()
+async def get_config(request: Request) -> ConfigResponse:
     """
     Get non-sensitive configuration information.
     
@@ -295,16 +329,39 @@ async def get_config() -> ConfigResponse:
 if __name__ == "__main__":
     import uvicorn
     
+    # Get SSL context for HTTPS if enabled
+    ssl_context = get_ssl_context()
+    
     # Hot-reload configuration in development
     reload_dirs = ["./app"] if settings.is_development else None
     
-    uvicorn.run(
-        "main:app",
-        host=settings.HOST,
-        port=settings.PORT,
-        reload=settings.RELOAD,
-        reload_dirs=reload_dirs,
-        workers=settings.WORKERS if not settings.RELOAD else 1,
-        log_level=settings.LOG_LEVEL.lower(),
-        access_log=settings.is_development
-    )
+    # Configure server parameters
+    server_config = {
+        "app": "main:app",
+        "host": settings.HOST,
+        "port": settings.PORT,
+        "reload": settings.RELOAD,
+        "reload_dirs": reload_dirs,
+        "workers": settings.WORKERS if not settings.RELOAD else 1,
+        "log_level": settings.LOG_LEVEL.lower(),
+        "access_log": settings.is_development,
+    }
+    
+    # Add SSL configuration if HTTPS is enabled
+    if ssl_context:
+        server_config.update({
+            "ssl_certfile": ssl_context[0],
+            "ssl_keyfile": ssl_context[1],
+        })
+        print(f"Starting server with HTTPS on https://{settings.HOST}:{settings.PORT}")
+        print("Note: Self-signed certificate will trigger browser warnings")
+    else:
+        print(f"Starting server with HTTP on http://{settings.HOST}:{settings.PORT}")
+    
+    # Security information
+    if settings.SECURITY_HEADERS_ENABLED:
+        print("Security headers: Enabled")
+    if settings.RATE_LIMITING_ENABLED:
+        print(f"Rate limiting: {settings.RATE_LIMIT_REQUESTS} requests/minute")
+    
+    uvicorn.run(**server_config)

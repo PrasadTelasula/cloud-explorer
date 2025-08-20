@@ -71,6 +71,33 @@ class Settings(BaseSettings):
     ALGORITHM: str = Field(default="HS256", description="JWT algorithm")
     
     # =============================================================================
+    # SECURITY CONFIGURATION
+    # =============================================================================
+    
+    # HTTPS Configuration
+    HTTPS_ENABLED: bool = Field(default=False, description="Enable HTTPS for development")
+    SSL_CERT_PATH: str = Field(default="certs/cert.pem", description="SSL certificate path")
+    SSL_KEY_PATH: str = Field(default="certs/key.pem", description="SSL private key path")
+    
+    # Security Headers
+    SECURITY_HEADERS_ENABLED: bool = Field(default=True, description="Enable security headers")
+    HSTS_MAX_AGE: int = Field(default=31536000, description="HSTS max age in seconds")
+    CSP_POLICY: str = Field(
+        default="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
+        description="Content Security Policy"
+    )
+    
+    # Rate Limiting
+    RATE_LIMITING_ENABLED: bool = Field(default=True, description="Enable rate limiting")
+    RATE_LIMIT_REQUESTS: int = Field(default=100, ge=1, description="Rate limit requests per minute")
+    RATE_LIMIT_WINDOW: int = Field(default=60, ge=1, description="Rate limit window in seconds")
+    
+    # API Rate Limits
+    API_RATE_LIMIT_CONFIG: int = Field(default=10, ge=1, description="Config API rate limit per minute")
+    API_RATE_LIMIT_HEALTH: int = Field(default=60, ge=1, description="Health API rate limit per minute")
+    API_RATE_LIMIT_DEFAULT: int = Field(default=100, ge=1, description="Default API rate limit per minute")
+    
+    # =============================================================================
     # AWS CONFIGURATION
     # =============================================================================
     

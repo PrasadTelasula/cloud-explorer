@@ -4,10 +4,11 @@ Health check endpoints
 from typing import Dict, Any
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, status, Request
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.core.security import rate_limit_health
 from app.models.responses import ErrorResponse
 
 
@@ -75,13 +76,18 @@ router = APIRouter()
             "description": "API is healthy and responding",
             "model": HealthResponse,
         },
+        429: {
+            "description": "Rate limit exceeded",
+            "model": ErrorResponse,
+        },
         503: {
             "description": "API is unhealthy or experiencing issues",
             "model": ErrorResponse,
         },
     },
 )
-async def health_check() -> HealthResponse:
+@rate_limit_health()
+async def health_check(request: Request) -> HealthResponse:
     """
     Basic health check endpoint to verify API is operational.
     
@@ -111,13 +117,18 @@ async def health_check() -> HealthResponse:
             "description": "Detailed health information retrieved successfully",
             "model": DetailedHealthResponse,
         },
+        429: {
+            "description": "Rate limit exceeded",
+            "model": ErrorResponse,
+        },
         503: {
             "description": "API is unhealthy or experiencing issues",
             "model": ErrorResponse,
         },
     },
 )
-async def detailed_health_check() -> DetailedHealthResponse:
+@rate_limit_health()
+async def detailed_health_check(request: Request) -> DetailedHealthResponse:
     """
     Comprehensive health check with detailed system information.
     

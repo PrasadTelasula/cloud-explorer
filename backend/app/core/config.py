@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     SECURITY_HEADERS_ENABLED: bool = Field(default=True, description="Enable security headers")
     HSTS_MAX_AGE: int = Field(default=31536000, description="HSTS max age in seconds")
     CSP_POLICY: str = Field(
-        default="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
+        default="default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' cdn.jsdelivr.net; img-src 'self' data: fastapi.tiangolo.com; font-src 'self' cdn.jsdelivr.net; connect-src 'self'",
         description="Content Security Policy"
     )
     

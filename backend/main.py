@@ -21,7 +21,7 @@ from app.core.security import (
     rate_limit_config
 )
 from app.core.ssl_utils import get_ssl_context
-from app.routers import health
+from app.routers import health, aws_profiles
 from app.models.responses import RootResponse, ConfigResponse, ErrorResponse
 
 
@@ -135,6 +135,7 @@ rate_limiter = setup_rate_limiting(app)
 
 # Include routers
 app.include_router(health.router, prefix="/api", tags=["health"])
+app.include_router(aws_profiles.router, prefix="/api/aws", tags=["aws-profiles"])
 
 
 def custom_openapi():

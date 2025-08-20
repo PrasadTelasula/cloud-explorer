@@ -4,10 +4,20 @@ Models package for Cloud Explorer API
 
 from .responses import (
     ErrorResponse,
-    SuccessResponse,
+    SuccessResponse, 
     RootResponse,
     ConfigResponse,
     DetailedHealthResponse,
+)
+from .aws import (
+    AWSProfile,
+    AWSCredential,
+    AWSProfileCollection,
+    AWSProfileType,
+    AWSCredentialError,
+    AWSProfileNotFoundError,
+    AWSCredentialFileError,
+    AWSProfileValidationError,
 )
 
 __all__ = [
@@ -16,4 +26,12 @@ __all__ = [
     "RootResponse",
     "ConfigResponse",
     "DetailedHealthResponse",
+    "AWSProfile",
+    "AWSCredential", 
+    "AWSProfileCollection",
+    "AWSProfileType",
+    "AWSCredentialError",
+    "AWSProfileNotFoundError",
+    "AWSCredentialFileError", 
+    "AWSProfileValidationError",
 ]

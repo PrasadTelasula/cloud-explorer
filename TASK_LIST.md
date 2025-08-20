@@ -31,7 +31,7 @@
   - **Prerequisites**: Task 0.1.2
   - **Status**: ✅ COMPLETED - Project structure created with environment templates
 
-- [ ] **Task 1.1.2**: Set up Next.js frontend
+- [x] **Task 1.1.2**: Set up Next.js frontend
   - Initialize Next.js project with TypeScript and App Router
   - Install and configure Tailwind CSS with custom theme
   - Set up shadcn/ui with tweakcn.com compatibility
@@ -39,6 +39,7 @@
   - Set up testing framework (Jest, React Testing Library)
   - **Estimated Time**: 4 hours
   - **Prerequisites**: Task 1.1.1
+  - **Status**: ✅ COMPLETED - Next.js frontend setup with shadcn/ui, testing, and code quality tools
 
 - [ ] **Task 1.1.3**: Set up Python FastAPI backend
   - Initialize Python project with uv (uv init backend)

@@ -2,6 +2,7 @@
 Cloud Explorer Backend - Main FastAPI Application
 """
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, status, Request
@@ -21,18 +22,24 @@ from app.core.security import (
     rate_limit_config
 )
 from app.core.ssl_utils import get_ssl_context
-from app.routers import health, aws_profiles
+from app.routers import health, aws_profiles, aws_sessions
 from app.models.responses import RootResponse, ConfigResponse, ErrorResponse
+from app.aws.session_manager import cleanup_sessions_periodically
 
 
 # Setup logging
 setup_logging(settings)
 logger = logging.getLogger(__name__)
 
+# Background task for session cleanup
+cleanup_task = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
+    global cleanup_task
+    
     # Startup
     logger.info("Starting Cloud Explorer API...")
     
@@ -45,10 +52,24 @@ async def lifespan(app: FastAPI):
     logger.info(f"Enabled services: {', '.join(settings.enabled_services)}")
     logger.info(f"API documentation: {'/docs' if settings.ENABLE_OPENAPI_DOCS else 'disabled'}")
     
+    # Start background session cleanup task
+    cleanup_task = asyncio.create_task(cleanup_sessions_periodically())
+    logger.info("AWS session cleanup task started")
+    
     yield
     
     # Shutdown
     logger.info("Shutting down Cloud Explorer API...")
+    
+    # Cancel background tasks
+    if cleanup_task:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            logger.info("Session cleanup task cancelled")
+        except Exception as e:
+            logger.error(f"Error stopping session cleanup task: {str(e)}")
 
 
 # Create FastAPI application
@@ -96,6 +117,14 @@ app = FastAPI(
             },
         },
         {
+            "name": "AWS Sessions",
+            "description": "AWS session management with credential validation, caching, and role assumption",
+            "externalDocs": {
+                "description": "AWS Session Management Documentation",
+                "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use.html",
+            },
+        },
+        {
             "name": "resources",
             "description": "AWS resource discovery and management endpoints",
         },
@@ -136,6 +165,7 @@ rate_limiter = setup_rate_limiting(app)
 # Include routers
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(aws_profiles.router, prefix="/api/aws", tags=["aws-profiles"])
+app.include_router(aws_sessions.router, tags=["aws-sessions"])
 
 
 def custom_openapi():

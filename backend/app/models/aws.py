@@ -2,8 +2,8 @@
 AWS Profile and Credential Models
 """
 from enum import Enum
-from typing import Optional, Dict, Any, List
-from datetime import datetime
+from typing import Optional, Dict, Any, List, Union
+from datetime import datetime, timedelta
 from pydantic import BaseModel, Field, validator
 
 
@@ -36,6 +36,24 @@ class AWSProfile(BaseModel):
     output: Optional[str] = Field(None, description="Default output format")
     profile_type: AWSProfileType = Field(AWSProfileType.IAM_USER, description="Profile type")
     
+    def __init__(self, **data):
+        # Auto-detect profile type before calling parent constructor
+        if 'profile_type' not in data or data.get('profile_type') == AWSProfileType.IAM_USER:
+            # Check for SSO profile (traditional or session format)
+            if data.get('sso_start_url') or data.get('sso_session'):
+                data['profile_type'] = AWSProfileType.SSO
+            # Check for role assumption
+            elif data.get('role_arn'):
+                data['profile_type'] = AWSProfileType.IAM_ROLE
+            # Check for federated access
+            elif data.get('web_identity_token_file'):
+                data['profile_type'] = AWSProfileType.FEDERATED
+            # Check for session credentials
+            elif data.get('credentials') and hasattr(data['credentials'], 'aws_session_token') and data['credentials'].aws_session_token:
+                data['profile_type'] = AWSProfileType.SESSION
+        
+        super().__init__(**data)
+    
     # IAM Role fields
     role_arn: Optional[str] = Field(None, description="IAM role ARN to assume")
     source_profile: Optional[str] = Field(None, description="Source profile for role assumption")
@@ -49,6 +67,7 @@ class AWSProfile(BaseModel):
     sso_region: Optional[str] = Field(None, description="SSO region")
     sso_account_id: Optional[str] = Field(None, description="SSO account ID")
     sso_role_name: Optional[str] = Field(None, description="SSO role name")
+    sso_session: Optional[str] = Field(None, description="SSO session name (new format)")
     
     # Credential fields (from credentials file)
     credentials: Optional[AWSCredential] = Field(None, description="Associated credentials")
@@ -56,31 +75,6 @@ class AWSProfile(BaseModel):
     # Additional metadata
     credential_source: Optional[str] = Field(None, description="Source of credentials")
     web_identity_token_file: Optional[str] = Field(None, description="Web identity token file path")
-    
-    @validator('profile_type', pre=True, always=True)
-    def determine_profile_type(cls, v, values):
-        """Automatically determine profile type based on fields"""
-        if v != AWSProfileType.IAM_USER:
-            return v
-        
-        # Check for SSO profile
-        if values.get('sso_start_url'):
-            return AWSProfileType.SSO
-        
-        # Check for role assumption
-        if values.get('role_arn'):
-            return AWSProfileType.IAM_ROLE
-        
-        # Check for federated access
-        if values.get('web_identity_token_file'):
-            return AWSProfileType.FEDERATED
-        
-        # Check for session credentials
-        credentials = values.get('credentials')
-        if credentials and hasattr(credentials, 'aws_session_token') and credentials.aws_session_token:
-            return AWSProfileType.SESSION
-        
-        return AWSProfileType.IAM_USER
     
     @property
     def is_valid(self) -> bool:
@@ -166,3 +160,114 @@ class AWSCredentialFileError(AWSCredentialError):
 class AWSProfileValidationError(AWSCredentialError):
     """Raised when profile validation fails"""
     pass
+
+
+class AWSSessionError(AWSCredentialError):
+    """Raised when there are issues with AWS session management"""
+    pass
+
+
+class AWSSessionExpiredError(AWSSessionError):
+    """Raised when AWS session has expired"""
+    pass
+
+
+class AWSSession(BaseModel):
+    """
+    AWS session information with caching and expiration
+    
+    ⚠️  SECURITY WARNING: 
+    - Never store SSO credentials - use profile names instead
+    - Credentials are only cached for standard IAM user sessions
+    - SSO sessions rely on AWS CLI's secure credential cache
+    """
+    profile_name: str = Field(..., description="Profile name for this session")
+    region: str = Field(..., description="AWS region")
+    session_id: str = Field(..., description="Unique session identifier")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Session creation time")
+    expires_at: Optional[datetime] = Field(None, description="Session expiration time")
+    credentials: Optional[Dict[str, Optional[str]]] = Field(None, description="Cached credentials (IAM users only - NEVER for SSO)")
+    is_role_session: bool = Field(False, description="Whether this is an assumed role or SSO session")
+    role_arn: Optional[str] = Field(None, description="ARN of assumed role")
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+            str: lambda v: "***REDACTED***" if any(key in str(v).lower() for key in ["secret", "token", "key"]) else v
+        }
+    
+    @property
+    def is_expired(self) -> bool:
+        """Check if session has expired"""
+        if not self.expires_at:
+            return False
+        return datetime.utcnow() >= self.expires_at
+    
+    @property
+    def time_until_expiry(self) -> Optional[timedelta]:
+        """Get time until session expires"""
+        if not self.expires_at:
+            return None
+        remaining = self.expires_at - datetime.utcnow()
+        return remaining if remaining.total_seconds() > 0 else timedelta(0)
+    
+    def should_refresh(self, threshold_minutes: int = 15) -> bool:
+        """Check if session should be refreshed based on threshold"""
+        if not self.expires_at:
+            return False
+        threshold = timedelta(minutes=threshold_minutes)
+        time_remaining = self.time_until_expiry
+        return time_remaining is not None and time_remaining <= threshold
+
+
+class AWSSessionCache(BaseModel):
+    """Cache for AWS sessions with automatic cleanup"""
+    sessions: Dict[str, AWSSession] = Field(default_factory=dict, description="Active sessions")
+    max_sessions: int = Field(100, description="Maximum number of cached sessions")
+    
+    def add_session(self, session: AWSSession) -> None:
+        """Add session to cache"""
+        # Clean expired sessions first
+        self.cleanup_expired()
+        
+        # If at max capacity, remove oldest session
+        if len(self.sessions) >= self.max_sessions:
+            oldest_key = min(self.sessions.keys(), 
+                           key=lambda k: self.sessions[k].created_at)
+            del self.sessions[oldest_key]
+        
+        self.sessions[session.session_id] = session
+    
+    def get_session(self, session_id: str) -> Optional[AWSSession]:
+        """Get session from cache"""
+        session = self.sessions.get(session_id)
+        if session and session.is_expired:
+            del self.sessions[session_id]
+            return None
+        return session
+    
+    def get_session_by_profile(self, profile_name: str, region: str) -> Optional[AWSSession]:
+        """Get active session for profile and region"""
+        for session in self.sessions.values():
+            if (session.profile_name == profile_name and 
+                session.region == region and 
+                not session.is_expired):
+                return session
+        return None
+    
+    def remove_session(self, session_id: str) -> bool:
+        """Remove session from cache"""
+        return self.sessions.pop(session_id, None) is not None
+    
+    def cleanup_expired(self) -> int:
+        """Remove expired sessions from cache"""
+        expired_ids = [sid for sid, session in self.sessions.items() 
+                      if session.is_expired]
+        for sid in expired_ids:
+            del self.sessions[sid]
+        return len(expired_ids)
+    
+    @property
+    def active_session_count(self) -> int:
+        """Get count of active (non-expired) sessions"""
+        return len([s for s in self.sessions.values() if not s.is_expired])

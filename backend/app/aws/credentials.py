@@ -176,10 +176,14 @@ class AWSCredentialsReader:
                 else:
                     config[key] = section_data[key]
         
-        # SSO fields
+        # SSO fields (traditional format)
         for key in ['sso_start_url', 'sso_region', 'sso_account_id', 'sso_role_name']:
             if key in section_data:
                 config[key] = section_data[key]
+        
+        # SSO session field (new format)
+        if 'sso_session' in section_data:
+            config['sso_session'] = section_data['sso_session']
         
         # Federated fields
         for key in ['web_identity_token_file', 'credential_source']:
@@ -187,6 +191,44 @@ class AWSCredentialsReader:
                 config[key] = section_data[key]
         
         return config
+    
+    def _resolve_sso_session(self, profile_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Resolve SSO session references and merge session data
+        
+        Args:
+            profile_data: Profile configuration data
+            
+        Returns:
+            Profile data with resolved SSO session information
+        """
+        if 'sso_session' not in profile_data:
+            return profile_data
+        
+        sso_session_name = profile_data['sso_session']
+        logger.debug(f"Resolving SSO session: {sso_session_name}")
+        
+        try:
+            aws_config = self._load_config_file()
+            sso_section_name = f'sso-session {sso_session_name}'
+            
+            if aws_config.has_section(sso_section_name):
+                sso_session_data = dict(aws_config.items(sso_section_name))
+                
+                # Merge SSO session data into profile data
+                # SSO session fields take precedence for sso_start_url and sso_region
+                for key in ['sso_start_url', 'sso_region', 'sso_registration_scopes']:
+                    if key in sso_session_data:
+                        profile_data[key] = sso_session_data[key]
+                
+                logger.debug(f"Resolved SSO session {sso_session_name}")
+            else:
+                logger.warning(f"SSO session '{sso_session_name}' not found in config")
+        
+        except AWSCredentialFileError as e:
+            logger.warning(f"Could not resolve SSO session {sso_session_name}: {e}")
+        
+        return profile_data
     
     def get_profile_names(self) -> List[str]:
         """
@@ -255,13 +297,17 @@ class AWSCredentialsReader:
             
             if aws_config.has_section(config_section_name):
                 config_section = dict(aws_config.items(config_section_name))
-                profile_data.update(self._parse_config_section(profile_name, config_section))
+                config_data = self._parse_config_section(profile_name, config_section)
+                profile_data.update(config_data)
+                
+                # Resolve SSO session references
+                profile_data = self._resolve_sso_session(profile_data)
         except AWSCredentialFileError as e:
             logger.debug(f"Could not read config file: {e}")
         
         # Check if profile exists
         if not credentials and not any(key in profile_data for key in 
-                                     ['role_arn', 'sso_start_url', 'web_identity_token_file']):
+                                     ['role_arn', 'sso_start_url', 'sso_session', 'web_identity_token_file']):
             available_profiles = self.get_profile_names()
             raise AWSProfileNotFoundError(
                 f"Profile '{profile_name}' not found. Available profiles: {available_profiles}"

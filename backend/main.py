@@ -22,7 +22,7 @@ from app.core.security import (
     rate_limit_config
 )
 from app.core.ssl_utils import get_ssl_context
-from app.routers import health, aws_profiles, aws_sessions, aws_clients
+from app.routers import health, aws_profiles, aws_sessions, aws_clients, accounts
 from app.models.responses import RootResponse, ConfigResponse, ErrorResponse
 from app.aws.session_manager import cleanup_sessions_periodically
 from app.aws.client_factory import cleanup_clients_periodically
@@ -137,6 +137,14 @@ app = FastAPI(
             },
         },
         {
+            "name": "Accounts",
+            "description": "AWS accounts and profiles management with comprehensive metadata and validation",
+            "externalDocs": {
+                "description": "AWS Account Management",
+                "url": "https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_accounts.html",
+            },
+        },
+        {
             "name": "resources",
             "description": "AWS resource discovery and management endpoints",
         },
@@ -179,6 +187,7 @@ app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(aws_profiles.router, prefix="/api/aws", tags=["aws-profiles"])
 app.include_router(aws_sessions.router, tags=["aws-sessions"])
 app.include_router(aws_clients.router, tags=["aws-clients"])
+app.include_router(accounts.router, tags=["accounts"])
 
 
 def custom_openapi():

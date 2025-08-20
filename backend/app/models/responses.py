@@ -4,6 +4,132 @@ API Response Models for Cloud Explorer
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
+from enum import Enum
+
+from app.models.aws import AWSProfileType
+
+
+class AccountStatus(str, Enum):
+    """Account validation status"""
+    VALID = "valid"
+    INVALID = "invalid"
+    EXPIRED = "expired"
+    UNKNOWN = "unknown"
+
+
+class ProfileValidationInfo(BaseModel):
+    """Profile validation information"""
+    is_valid: bool = Field(..., description="Whether the profile credentials are valid")
+    status: AccountStatus = Field(..., description="Account validation status")
+    account_id: Optional[str] = Field(None, description="AWS account ID")
+    user_arn: Optional[str] = Field(None, description="User or role ARN")
+    user_id: Optional[str] = Field(None, description="User ID")
+    last_validated: Optional[datetime] = Field(None, description="Last validation timestamp")
+    error: Optional[str] = Field(None, description="Validation error message if any")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "is_valid": True,
+                "status": "valid",
+                "account_id": "123456789012",
+                "user_arn": "arn:aws:sts::123456789012:assumed-role/MyRole/session",
+                "user_id": "AROABC123DEFGHIJKLMN:session",
+                "last_validated": "2025-08-20T10:30:00Z",
+                "error": None
+            }
+        }
+
+
+class AccountProfile(BaseModel):
+    """AWS account profile information"""
+    profile_name: str = Field(..., description="AWS profile name")
+    profile_type: AWSProfileType = Field(..., description="Type of AWS profile")
+    region: Optional[str] = Field(None, description="Default region for this profile")
+    output: Optional[str] = Field(None, description="Default output format")
+    validation: ProfileValidationInfo = Field(..., description="Profile validation information")
+    
+    # Role-specific information
+    role_arn: Optional[str] = Field(None, description="IAM role ARN (for role profiles)")
+    source_profile: Optional[str] = Field(None, description="Source profile for role assumption")
+    
+    # SSO-specific information
+    sso_start_url: Optional[str] = Field(None, description="SSO start URL")
+    sso_region: Optional[str] = Field(None, description="SSO region")
+    sso_account_id: Optional[str] = Field(None, description="SSO account ID")
+    sso_role_name: Optional[str] = Field(None, description="SSO role name")
+    sso_session: Optional[str] = Field(None, description="SSO session name")
+    
+    # Additional metadata
+    is_default: bool = Field(False, description="Whether this is the default profile")
+    available_regions: List[str] = Field(default_factory=list, description="Available regions for this profile")
+    permissions_summary: Optional[Dict[str, Any]] = Field(None, description="High-level permissions summary")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "profile_name": "production",
+                "profile_type": "IAM_ROLE",
+                "region": "us-east-1",
+                "output": "json",
+                "validation": {
+                    "is_valid": True,
+                    "status": "valid",
+                    "account_id": "123456789012",
+                    "user_arn": "arn:aws:sts::123456789012:assumed-role/ProductionRole/session",
+                    "last_validated": "2025-08-20T10:30:00Z"
+                },
+                "role_arn": "arn:aws:iam::123456789012:role/ProductionRole",
+                "source_profile": "default",
+                "is_default": False,
+                "available_regions": ["us-east-1", "us-west-2", "eu-west-1"],
+                "permissions_summary": {
+                    "services": ["ec2", "s3", "rds"],
+                    "admin_access": False,
+                    "read_only": False
+                }
+            }
+        }
+
+
+class AccountsResponse(BaseModel):
+    """Response model for accounts API endpoint"""
+    profiles: List[AccountProfile] = Field(..., description="List of AWS profiles with metadata")
+    total_profiles: int = Field(..., description="Total number of profiles")
+    valid_profiles: int = Field(..., description="Number of profiles with valid credentials")
+    invalid_profiles: int = Field(..., description="Number of profiles with invalid credentials")
+    default_profile: Optional[str] = Field(None, description="Name of the default profile")
+    cache_info: Dict[str, Any] = Field(..., description="Response cache information")
+    generated_at: datetime = Field(default_factory=datetime.utcnow, description="Response generation timestamp")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "profiles": [
+                    {
+                        "profile_name": "default",
+                        "profile_type": "IAM_USER",
+                        "region": "us-east-1",
+                        "validation": {
+                            "is_valid": True,
+                            "status": "valid",
+                            "account_id": "123456789012"
+                        },
+                        "is_default": True
+                    }
+                ],
+                "total_profiles": 3,
+                "valid_profiles": 2,
+                "invalid_profiles": 1,
+                "default_profile": "default",
+                "cache_info": {
+                    "cached": True,
+                    "cache_age_seconds": 120,
+                    "expires_in_seconds": 780
+                },
+                "generated_at": "2025-08-20T10:30:00Z"
+            }
+        }
 
 
 class ErrorResponse(BaseModel):

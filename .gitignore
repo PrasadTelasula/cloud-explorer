@@ -44,9 +44,7 @@ out/
 .env.production.local
 
 # IDE
-.vscode/settings.json
-.vscode/launch.json
-.vscode/extensions.json
+.vscode/
 .idea/
 *.swp
 *.swo

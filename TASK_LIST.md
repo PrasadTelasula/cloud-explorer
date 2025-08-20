@@ -101,6 +101,7 @@
   - Include role information and permission summaries
   - Handle errors for invalid credentials gracefully
   - Implement response caching (15-minute cache)
+  - **Documentation**: Complete Swagger/OpenAPI specs with examples
   - **Estimated Time**: 3 hours
   - **Prerequisites**: Task 1.3.3
 
@@ -109,14 +110,24 @@
   - Test STS get-caller-identity for each profile
   - Return account ID, user/role information, and permissions
   - Check service availability per region
+  - **Documentation**: Complete Swagger/OpenAPI specs with examples
   - **Estimated Time**: 2.5 hours
   - **Prerequisites**: Task 1.4.1
 
-- [ ] **Task 1.4.3**: API error handling and middleware
+- [ ] **Task 1.4.3**: Swagger/OpenAPI documentation setup
+  - Configure FastAPI automatic OpenAPI/Swagger documentation
+  - Set up comprehensive API documentation standards
+  - Implement request/response models with Pydantic schemas
+  - Add detailed endpoint descriptions, examples, and error responses
+  - Configure Swagger UI customization and security schemes
+  - **Estimated Time**: 2 hours
+  - **Prerequisites**: Task 1.4.2
+
+- [ ] **Task 1.4.4**: API error handling and middleware
   - Global exception handler for AWS errors
   - Request/response logging middleware
   - API versioning support
-  - OpenAPI documentation generation
+  - Rate limiting and security middleware
   - **Estimated Time**: 2 hours
   - **Prerequisites**: Task 1.4.2
 

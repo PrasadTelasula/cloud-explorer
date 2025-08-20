@@ -75,6 +75,24 @@ backend/
 - **CORS Configuration**: Restrictive CORS policies for production
 - **Error Boundaries**: Implement comprehensive error handling
 
+## 📚 API Documentation Standards
+
+### Swagger/OpenAPI Requirements
+- **Complete Documentation**: Every API endpoint must have comprehensive Swagger/OpenAPI documentation
+- **Request/Response Models**: All endpoints must use Pydantic models for request/response validation
+- **Examples**: Include realistic examples for all request/response schemas
+- **Error Documentation**: Document all possible error responses with status codes
+- **Security Schemes**: Document authentication requirements for protected endpoints
+- **Descriptions**: Provide clear, detailed descriptions for endpoints, parameters, and responses
+- **Tags and Grouping**: Organize endpoints with logical tags for better navigation
+
+### Documentation Standards
+- **Endpoint Descriptions**: Clear purpose and functionality explanation
+- **Parameter Documentation**: Type, format, validation rules, and examples
+- **Response Schemas**: Complete response structure with field descriptions
+- **Error Handling**: All HTTP status codes and error formats documented
+- **Live Examples**: Working examples that can be executed from Swagger UI
+
 ## � UI/UX Development Guidelines
 
 ### shadcn/ui Component Standards

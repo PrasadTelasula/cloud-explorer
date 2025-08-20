@@ -22,23 +22,25 @@ from app.core.security import (
     rate_limit_config
 )
 from app.core.ssl_utils import get_ssl_context
-from app.routers import health, aws_profiles, aws_sessions
+from app.routers import health, aws_profiles, aws_sessions, aws_clients
 from app.models.responses import RootResponse, ConfigResponse, ErrorResponse
 from app.aws.session_manager import cleanup_sessions_periodically
+from app.aws.client_factory import cleanup_clients_periodically
 
 
 # Setup logging
 setup_logging(settings)
 logger = logging.getLogger(__name__)
 
-# Background task for session cleanup
+# Background tasks
 cleanup_task = None
+client_cleanup_task = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
-    global cleanup_task
+    global cleanup_task, client_cleanup_task
     
     # Startup
     logger.info("Starting Cloud Explorer API...")
@@ -52,9 +54,10 @@ async def lifespan(app: FastAPI):
     logger.info(f"Enabled services: {', '.join(settings.enabled_services)}")
     logger.info(f"API documentation: {'/docs' if settings.ENABLE_OPENAPI_DOCS else 'disabled'}")
     
-    # Start background session cleanup task
+    # Start background cleanup tasks
     cleanup_task = asyncio.create_task(cleanup_sessions_periodically())
-    logger.info("AWS session cleanup task started")
+    client_cleanup_task = asyncio.create_task(cleanup_clients_periodically())
+    logger.info("AWS session and client cleanup tasks started")
     
     yield
     
@@ -62,14 +65,15 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Cloud Explorer API...")
     
     # Cancel background tasks
-    if cleanup_task:
-        cleanup_task.cancel()
-        try:
-            await cleanup_task
-        except asyncio.CancelledError:
-            logger.info("Session cleanup task cancelled")
-        except Exception as e:
-            logger.error(f"Error stopping session cleanup task: {str(e)}")
+    for task, name in [(cleanup_task, "session cleanup"), (client_cleanup_task, "client cleanup")]:
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                logger.info(f"{name.title()} task cancelled")
+            except Exception as e:
+                logger.error(f"Error stopping {name} task: {str(e)}")
 
 
 # Create FastAPI application
@@ -125,6 +129,14 @@ app = FastAPI(
             },
         },
         {
+            "name": "AWS Clients",
+            "description": "AWS service client factory with regional management, retry logic, and caching",
+            "externalDocs": {
+                "description": "AWS SDK Documentation",
+                "url": "https://docs.aws.amazon.com/sdk-for-python/v1/developer-guide/",
+            },
+        },
+        {
             "name": "resources",
             "description": "AWS resource discovery and management endpoints",
         },
@@ -166,6 +178,7 @@ rate_limiter = setup_rate_limiting(app)
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(aws_profiles.router, prefix="/api/aws", tags=["aws-profiles"])
 app.include_router(aws_sessions.router, tags=["aws-sessions"])
+app.include_router(aws_clients.router, tags=["aws-clients"])
 
 
 def custom_openapi():

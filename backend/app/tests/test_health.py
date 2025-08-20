@@ -14,6 +14,8 @@ def test_root_endpoint(client: TestClient):
     assert data["version"] == "0.1.0"
     assert "docs" in data
     assert "health" in data
+    assert "enabled_services" in data
+    assert "environment" in data
 
 
 def test_health_check(client: TestClient):
@@ -36,3 +38,13 @@ def test_detailed_health_check(client: TestClient):
     assert "api" in data
     assert "configuration" in data
     assert data["api"]["name"] == "Cloud Explorer API"
+
+
+def test_config_endpoint_development(client: TestClient):
+    """Test config endpoint in development mode"""
+    # This test assumes DEBUG=True (testserver environment)
+    response = client.get("/config")
+    assert response.status_code == 200
+    data = response.json()
+    assert "PROJECT_NAME" in data
+    assert data["SECRET_KEY"] == "***"  # Should be masked

@@ -4,6 +4,8 @@ Test configuration and fixtures
 import pytest
 from fastapi.testclient import TestClient
 
+
+# Import app directly without patching for now
 from main import app
 
 
